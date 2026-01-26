@@ -54,6 +54,10 @@ struct BookStorage {
         let documentsDirectory = try getDocumentsDirectory()
         let destinationURL = documentsDirectory.appendingPathComponent(destinationPath)
         
+        if destinationURL.path == fileURL.path {
+            return destinationURL
+        }
+        
         let destinationFolder = destinationURL.deletingLastPathComponent()
         if !FileManager.default.fileExists(atPath: destinationFolder.path) {
             try FileManager.default.createDirectory(at: destinationFolder, withIntermediateDirectories: true)
