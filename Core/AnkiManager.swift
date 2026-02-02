@@ -98,16 +98,7 @@ class AnkiManager {
     func addNote(content: [String: String], context: MiningContext) {
         guard let deck = selectedDeck,
               let noteType = selectedNoteType,
-              let expression = content["expression"],
-              let reading = content["reading"],
-              let matched = content["matched"],
-              let furiganaPlain = content["furiganaPlain"],
-              let glossary = content["glossary"],
-              let glossaryFirst = content["glossaryFirst"],
-              let frequencies = content["frequenciesHtml"],
-              let frequencyHarmonicRank = content["freqHarmonicRank"],
-              let pitchPositions = content["pitchPositions"],
-              let pitchCategories = content["pitchCategories"] else {
+              let matched = content["matched"] else {
             return
         }
         
@@ -140,23 +131,23 @@ class AnkiManager {
             } else if let standardHandlebar = Handlebars(rawValue: handlebar) {
                 switch standardHandlebar {
                 case .expression:
-                    value = expression
+                    value = content["expression"] ?? ""
                 case .reading:
-                    value = reading
+                    value = content["reading"] ?? ""
                 case .furiganaPlain:
-                    value = furiganaPlain
+                    value = content["furiganaPlain"] ?? ""
                 case .glossary:
-                    value = glossary
+                    value = content["glossary"] ?? ""
                 case .glossaryFirst:
-                    value = glossaryFirst
+                    value = content["glossaryFirst"] ?? ""
                 case .frequencies:
-                    value = frequencies
+                    value = content["frequenciesHtml"] ?? ""
                 case .frequencyHarmonicRank:
-                    value = frequencyHarmonicRank
+                    value = content["freqHarmonicRank"] ?? ""
                 case .pitchPositions:
-                    value = pitchPositions
+                    value = content["pitchPositions"] ?? ""
                 case .pitchCategories:
-                    value = pitchCategories
+                    value = content["pitchCategories"] ?? ""
                 case .sentence:
                     value = context.sentence.replacingOccurrences(of: matched, with: "<b>\(matched)</b>")
                 case .documentTitle:
