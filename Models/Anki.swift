@@ -46,6 +46,7 @@ enum Handlebars: String, CaseIterable {
     case expression = "{expression}"
     case reading = "{reading}"
     case furiganaPlain = "{furigana-plain}"
+    case audio = "{audio}"
     case glossary = "{glossary}"
     case glossaryFirst = "{glossary-first}"
     case popupSelectionText = "{popup-selection-text}"
@@ -56,7 +57,6 @@ enum Handlebars: String, CaseIterable {
     case pitchCategories = "{pitch-accent-categories}"
     case documentTitle = "{document-title}"
     case bookCover = "{book-cover}"
-    case audio = "{audio}"
 
     static let singleGlossaryPrefix = "{single-glossary-"
 }
