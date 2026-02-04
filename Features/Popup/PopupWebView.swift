@@ -10,6 +10,8 @@ import SwiftUI
 import WebKit
 
 class ProxyHandler: NSObject, WKURLSchemeHandler {
+    private var tasks = Set<ObjectIdentifier>()
+    
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let requestUrl = task.request.url,
               let components = URLComponents(url: requestUrl, resolvingAgainstBaseURL: false),
@@ -18,29 +20,42 @@ class ProxyHandler: NSObject, WKURLSchemeHandler {
             task.didFailWithError(URLError(.badURL))
             return
         }
-
+        
+        let taskId = ObjectIdentifier(task)
+        tasks.insert(taskId)
+        
         Task {
             do {
                 let (data, _) = try await URLSession.shared.data(from: targetUrl)
-                let response = HTTPURLResponse(
-                    url: requestUrl,
-                    statusCode: 200,
-                    httpVersion: "HTTP/1.1",
-                    headerFields: [
-                        "Access-Control-Allow-Origin": "*",
-                        "Content-Type": "application/json"
-                    ]
-                )!
-                task.didReceive(response)
-                task.didReceive(data)
-                task.didFinish()
+                
+                await MainActor.run {
+                    guard self.tasks.contains(taskId) else { return }
+                    
+                    let response = HTTPURLResponse(
+                        url: requestUrl,
+                        statusCode: 200,
+                        httpVersion: "HTTP/1.1",
+                        headerFields: [
+                            "Access-Control-Allow-Origin": "*",
+                            "Content-Type": "application/json"
+                        ]
+                    )!
+                    task.didReceive(response)
+                    task.didReceive(data)
+                    task.didFinish()
+                }
             } catch {
-                task.didFailWithError(error)
+                await MainActor.run {
+                    guard self.tasks.contains(taskId) else { return }
+                    task.didFailWithError(error)
+                }
             }
         }
     }
-
-    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+    
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {
+        tasks.remove(ObjectIdentifier(task))
+    }
 }
 
 struct PopupWebView: UIViewRepresentable {
