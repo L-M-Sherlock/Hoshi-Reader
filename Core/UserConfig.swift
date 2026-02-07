@@ -136,11 +136,29 @@ class UserConfig {
         }
     }
     
+    var enableLocalAudio: Bool {
+        didSet {
+            UserDefaults.standard.set(enableLocalAudio, forKey: "enableLocalAudio")
+            if enableLocalAudio {
+                audioSources.insert(UserConfig.localAudioSource, at: 0)
+            } else {
+                audioSources.removeAll { $0.url == LocalFileServer.localAudioURL }
+            }
+        }
+    }
+    
     var enabledAudioSources: [String] {
         audioSources.filter { $0.isEnabled }.map { $0.url }
     }
     
+    static let localAudioSource = AudioSource(
+        name: "Local",
+        url: LocalFileServer.localAudioURL,
+        isEnabled: true
+    )
+    
     static let defaultAudioSource = AudioSource(
+        name: "Default",
         url: "https://hoshi-reader.manhhaoo-do.workers.dev/?term={term}&reading={reading}",
         isEnabled: true,
         isDefault: true
@@ -196,7 +214,7 @@ class UserConfig {
         } else {
             self.audioSources = [UserConfig.defaultAudioSource]
         }
-        
+        self.enableLocalAudio = defaults.object(forKey: "enableLocalAudio") as? Bool ?? false
         self.customCSS = defaults.string(forKey: "customCSS") ?? ""
     }
     
