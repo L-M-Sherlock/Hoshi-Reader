@@ -12,6 +12,10 @@ window.hoshiReader = {
     sentenceDelimiters: '。！？.!?\n\r',
     ttuRegex: /[^0-9A-Z○◯々-〇〻ぁ-ゖゝ-ゞァ-ヺー０-９Ａ-Ｚｦ-ﾝ\p{Radical}\p{Unified_Ideograph}]+/gimu,
     
+    isVertical() {
+        return window.getComputedStyle(document.body).writingMode === "vertical-rl";
+    },
+    
     isScanBoundary(char) {
         return /^[\s\u3000]$/.test(char) || this.scanDelimiters.includes(char);
     },
@@ -39,7 +43,7 @@ window.hoshiReader = {
     },
     
     calculateProgress() {
-        var vertical = window.getComputedStyle(document.body).writingMode === "vertical-rl";
+        var vertical = this.isVertical();
         var walker = this.createWalker();
         var totalChars = 0;
         var exploredChars = 0;
@@ -69,8 +73,8 @@ window.hoshiReader = {
         window.snapScrollRegistered = true;
         window.lastPageScroll = initialScroll;
         
-        var vertical = window.getComputedStyle(document.body).writingMode === "vertical-rl";
-        window.addEventListener('scroll', function() {
+        var vertical = this.isVertical();
+        window.addEventListener('scroll', function () {
             if (vertical) {
                 var pageHeight = window.innerHeight;
                 var snappedScroll = Math.round(window.scrollY / pageHeight) * pageHeight;
@@ -96,7 +100,7 @@ window.hoshiReader = {
             return;
         }
         window.copyTextRegistered = true
-        document.addEventListener('copy', function(event) {
+        document.addEventListener('copy', function (event) {
             let text = window.getSelection()?.toString();
             if (!text) {
                 return;
@@ -106,9 +110,34 @@ window.hoshiReader = {
         }, true);
     },
     
+    paginate(direction) {
+        var vertical = this.isVertical();
+        var pageSize = vertical ? window.innerHeight : window.innerWidth;
+        if (pageSize <= 0) return "limit";
+        
+        if (direction === "forward") {
+            var totalSize = vertical ? document.body.scrollHeight : document.body.scrollWidth;
+            var maxScroll = Math.max(0, totalSize - pageSize);
+            var maxAlignedScroll = Math.floor(maxScroll / pageSize) * pageSize;
+            var currentScroll = vertical ? window.scrollY : window.scrollX;
+            if ((currentScroll + pageSize) <= (maxAlignedScroll + 1)) {
+                if (vertical) { window.scrollBy(0, pageSize); } else { window.scrollBy(pageSize, 0); }
+                return "scrolled";
+            }
+            return "limit";
+        } else {
+            var currentScroll = vertical ? window.scrollY : window.scrollX;
+            if (currentScroll > 0) {
+                if (vertical) { window.scrollBy(0, -pageSize); } else { window.scrollBy(-pageSize, 0); }
+                return "scrolled";
+            }
+            return "limit";
+        }
+    },
+    
     restoreProgress(progress) {
         var notifyComplete = () => window.webkit?.messageHandlers?.restoreCompleted?.postMessage(null);
-        var vertical = window.getComputedStyle(document.body).writingMode === "vertical-rl";
+        var vertical = this.isVertical();
         var scrollEl = document.scrollingElement || document.documentElement || document.body;
         var pageSize = vertical ? scrollEl.clientHeight : scrollEl.clientWidth;
         var totalSize = vertical ? scrollEl.scrollHeight : scrollEl.scrollWidth;
@@ -360,7 +389,7 @@ window.hoshiReader = {
             this.clearHighlight();
             return null;
         }
-
+        
         this.clearHighlight();
         
         const container = this.findParagraph(hit.node) || document.body;

@@ -43,6 +43,7 @@ struct ReaderWebView: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.userContentController.add(context.coordinator, name: "textSelected")
         config.userContentController.add(context.coordinator, name: "restoreCompleted")
+        config.defaultWebpagePreferences.preferredContentMode = .mobile
         
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.isOpaque = false
@@ -268,7 +269,6 @@ struct ReaderWebView: UIViewRepresentable {
                 style.innerHTML = `\(css)`;
                 document.head.appendChild(style);
                 
-
                 \(spacerJs)
                 \(readerJs)
                 window.hoshiReader.registerCopyText();
@@ -328,8 +328,7 @@ struct ReaderWebView: UIViewRepresentable {
             clearHighlight()
             parent.onTapOutside?()
             
-            let isVertical = parent.userConfig.verticalWriting
-            let script = paginationScript(direction: direction, isVertical: isVertical)
+            let script = paginationScript(direction: direction)
             
             webView.evaluateJavaScript(script) { [weak self] result, _ in
                 guard let self = self else { return }
@@ -345,64 +344,16 @@ struct ReaderWebView: UIViewRepresentable {
             }
         }
         
-        private func paginationScript(direction: NavigationDirection, isVertical: Bool) -> String {
-            if isVertical {
-                let pageHeight = Int(parent.viewSize.height)
-                if direction == .forward {
-                    return """
-                    (function() {
-                        var pageHeight = \(pageHeight);
-                        var totalSize = document.body.scrollHeight;
-                        var maxScroll = Math.max(0, totalSize - pageHeight);
-                        var maxAlignedScroll = Math.floor(maxScroll / pageHeight) * pageHeight;
-                        if ((window.scrollY + pageHeight) <= (maxAlignedScroll + 1)) {
-                            window.scrollBy(0, pageHeight);
-                            return "scrolled";
-                        }
-                        return "limit";
-                    })()
-                    """
-                } else {
-                    return """
-                    (function() {
-                        var pageHeight = \(pageHeight);
-                        if (window.scrollY > 0) {
-                            window.scrollBy(0, -pageHeight);
-                            return "scrolled";
-                        }
-                        return "limit";
-                    })()
-                    """
+        private func paginationScript(direction: NavigationDirection) -> String {
+            let jsDirection = direction == .forward ? "forward" : "backward"
+            return """
+            (function() {
+                if (!window.hoshiReader || typeof window.hoshiReader.paginate !== 'function') {
+                    return "limit";
                 }
-            } else {
-                let pageWidth = Int(parent.viewSize.width)
-                if direction == .forward {
-                    return """
-                    (function() {
-                        var pageWidth = \(pageWidth);
-                        var totalSize = document.body.scrollWidth;
-                        var maxScroll = Math.max(0, totalSize - pageWidth);
-                        var maxAlignedScroll = Math.floor(maxScroll / pageWidth) * pageWidth;
-                        if ((window.scrollX + pageWidth) <= (maxAlignedScroll + 1)) {
-                            window.scrollBy(pageWidth, 0);
-                            return "scrolled";
-                        }
-                        return "limit";
-                    })()
-                    """
-                } else {
-                    return """
-                    (function() {
-                        var pageWidth = \(pageWidth);
-                        if (window.scrollX > 0) {
-                            window.scrollBy(-pageWidth, 0);
-                            return "scrolled";
-                        }
-                        return "limit";
-                    })()
-                    """
-                }
-            }
+                return window.hoshiReader.paginate('\(jsDirection)');
+            })()
+            """
         }
         
         @objc func handleSwipeLeft(_ gesture: UISwipeGestureRecognizer) {
