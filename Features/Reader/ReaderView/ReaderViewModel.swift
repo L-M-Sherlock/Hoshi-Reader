@@ -65,6 +65,7 @@ class ReaderViewModel {
     var currentProgress: Double = 0.0
     var activeSheet: ActiveSheet?
     var bookInfo: BookInfo
+    let bridge = WebViewBridge()
     
     // lookups
     var showPopup = false
@@ -107,6 +108,11 @@ class ReaderViewModel {
         
         if enableStatistics {
             loadStatistics()
+        }
+        
+        if let url = getCurrentChapter() {
+            bridge.updateState(url: url, progress: currentProgress)
+            bridge.send(.loadChapter(url: url, progress: currentProgress))
         }
     }
     
@@ -160,40 +166,40 @@ class ReaderViewModel {
     }
     
     func saveBookmark(progress: Double) {
-        currentProgress = progress
-        let bookmark = Bookmark(
-            chapterIndex: index,
-            progress: progress,
-            characterCount: currentCharacter,
-            lastModified: Date()
-        )
-        if isTracking {
-            updateStats()
-            saveStats()
-        }
-        try? BookStorage.save(bookmark, inside: rootURL, as: FileNames.bookmark)
+        persistBookmark(progress: progress)
+        flushStats()
     }
     
-    func setIndex(index: Int, progress: Double) {
-        self.index = index
-        currentProgress = progress
-        saveBookmark(progress: progress)
+    func jumpToCharacter(_ characterCount: Int) {
+        guard let result = bookInfo.resolveCharacterPosition(characterCount) else { return }
+        flushStats()
+        if result.spineIndex == self.index {
+            persistBookmark(progress: result.progress)
+            bridge.send(.restoreProgress(result.progress))
+        } else {
+            loadChapter(index: result.spineIndex, progress: result.progress)
+        }
+        resetTrackingBaseline()
+    }
+    
+    func jumpToChapter(index: Int) {
+        flushStats()
+        loadChapter(index: index, progress: 0)
+        resetTrackingBaseline()
     }
     
     func nextChapter() -> Bool {
-        if index < document.spine.items.count - 1 {
-            setIndex(index: index + 1, progress: 0)
-            return true
-        }
-        return false
+        guard index < document.spine.items.count - 1 else { return false }
+        loadChapter(index: index + 1, progress: 0)
+        flushStats()
+        return true
     }
     
     func previousChapter() -> Bool {
-        if index > 0 {
-            setIndex(index: index - 1, progress: 1)
-            return true
-        }
-        return false
+        guard index > 0 else { return false }
+        loadChapter(index: index - 1, progress: 1)
+        flushStats()
+        return true
     }
     
     func handleTextSelection(_ selection: SelectionData, maxResults: Int) -> Int? {
@@ -221,6 +227,10 @@ class ReaderViewModel {
         }
     }
     
+    func clearWebHighlight() {
+        bridge.send(.clearHighlight)
+    }
+    
     func startTracking() {
         isTracking = true
         lastTimestamp = .now
@@ -228,12 +238,9 @@ class ReaderViewModel {
     }
     
     func stopTracking() {
-        guard isTracking else {
-            return
-        }
+        guard isTracking else { return }
+        flushStats()
         isTracking = false
-        updateStats()
-        saveStats()
     }
     
     // https://github.com/ttu-ttu/ebook-reader/blob/2703b50ec52b2e4f70afcab725c0f47dd8a66bf4/apps/web/src/lib/components/book-reader/book-reading-tracker/book-reading-tracker.svelte#L72
@@ -276,6 +283,38 @@ class ReaderViewModel {
         }
         
         try? BookStorage.save(stats, inside: rootURL, as: FileNames.statistics)
+    }
+    
+    private func persistBookmark(progress: Double) {
+        currentProgress = progress
+        bridge.updateProgress(progress)
+        let bookmark = Bookmark(
+            chapterIndex: index,
+            progress: progress,
+            characterCount: currentCharacter,
+            lastModified: Date()
+        )
+        try? BookStorage.save(bookmark, inside: rootURL, as: FileNames.bookmark)
+    }
+    
+    private func loadChapter(index: Int, progress: Double) {
+        self.index = index
+        persistBookmark(progress: progress)
+        if let url = getCurrentChapter() {
+            bridge.updateState(url: url, progress: progress)
+            bridge.send(.loadChapter(url: url, progress: progress))
+        }
+    }
+    
+    private func flushStats() {
+        guard isTracking else { return }
+        updateStats()
+        saveStats()
+    }
+    
+    private func resetTrackingBaseline() {
+        lastCount = currentCharacter
+        lastTimestamp = .now
     }
     
     static private func getDefaultStatistic(title: String) -> Statistics {

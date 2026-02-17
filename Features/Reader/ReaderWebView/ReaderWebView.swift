@@ -21,13 +21,37 @@ struct SelectionData {
     let rect: CGRect
 }
 
+enum WebViewCommand {
+    case loadChapter(url: URL, progress: Double)
+    case restoreProgress(Double)
+    case clearHighlight
+}
+
+@Observable
+@MainActor
+class WebViewBridge {
+    private(set) var chapterURL: URL?
+    private(set) var progress: Double = 0
+    var pendingCommands: [WebViewCommand] = []
+    
+    func send(_ command: WebViewCommand) {
+        pendingCommands.append(command)
+    }
+    
+    func updateState(url: URL, progress: Double) {
+        self.chapterURL = url
+        self.progress = progress
+    }
+    
+    func updateProgress(_ progress: Double) {
+        self.progress = progress
+    }
+}
+
 struct ReaderWebView: UIViewRepresentable {
-    let fileURL: URL?
     let userConfig: UserConfig
     let viewSize: CGSize
-    let clearHighlight: Bool
-    
-    let currentProgress: Double
+    let bridge: WebViewBridge
     var onNextChapter: () -> Bool
     var onPreviousChapter: () -> Bool
     var onSaveBookmark: (Double) -> Void
@@ -69,7 +93,6 @@ struct ReaderWebView: UIViewRepresentable {
         webView.addGestureRecognizer(tap)
         
         context.coordinator.webView = webView
-        context.coordinator.lastClearHighlight = clearHighlight
         
         webView.alpha = 0
         
@@ -80,20 +103,34 @@ struct ReaderWebView: UIViewRepresentable {
     
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.parent = self
-        if context.coordinator.lastClearHighlight != clearHighlight {
-            context.coordinator.lastClearHighlight = clearHighlight
-            context.coordinator.clearHighlight()
-        }
         
-        guard let url = fileURL else {
+        if !bridge.pendingCommands.isEmpty {
+            let commands = bridge.pendingCommands
+            bridge.pendingCommands.removeAll()
+            for command in commands {
+                switch command {
+                case .loadChapter(let url, let progress):
+                    context.coordinator.currentURL = url
+                    context.coordinator.pendingProgress = progress
+                    if let documentsDirectory = try? BookStorage.getDocumentsDirectory() {
+                        webView.alpha = 0
+                        webView.loadFileURL(url, allowingReadAccessTo: documentsDirectory)
+                    }
+                case .restoreProgress(let progress):
+                    context.coordinator.pendingProgress = progress
+                    webView.evaluateJavaScript("window.hoshiReader.restoreProgress(\(progress))") { _, _ in }
+                case .clearHighlight:
+                    context.coordinator.clearHighlight()
+                }
+            }
             return
         }
         
-        if context.coordinator.currentURL != url {
+        if context.coordinator.currentURL == nil, let url = bridge.chapterURL {
             context.coordinator.currentURL = url
-            guard let documentsDirectory = try? BookStorage.getDocumentsDirectory() else {
-                return
-            }
+            context.coordinator.pendingProgress = bridge.progress
+            guard let documentsDirectory = try? BookStorage.getDocumentsDirectory() else { return }
+            webView.alpha = 0
             webView.loadFileURL(url, allowingReadAccessTo: documentsDirectory)
         }
     }
@@ -107,7 +144,7 @@ struct ReaderWebView: UIViewRepresentable {
         var parent: ReaderWebView
         weak var webView: WKWebView?
         var currentURL: URL?
-        var lastClearHighlight = false
+        var pendingProgress: Double = 0
         
         init(_ parent: ReaderWebView) {
             self.parent = parent
@@ -314,7 +351,7 @@ struct ReaderWebView: UIViewRepresentable {
                 }).then(() => {
                     return new Promise(resolve => setTimeout(resolve, 50));
                 }).then(() => {
-                    window.hoshiReader.restoreProgress(\(self.parent.currentProgress));
+                    window.hoshiReader.restoreProgress(\(self.pendingProgress));
                 });
             })();
             """

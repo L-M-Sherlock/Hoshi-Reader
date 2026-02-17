@@ -51,7 +51,6 @@ struct ReaderView: View {
     @State private var viewModel: ReaderViewModel
     @State private var topSafeArea: CGFloat = 0
     @State private var focusMode = false
-    @State private var clearHighlight = false
     
     private let webViewPadding: CGFloat = 4
     private let lineHeight: CGFloat = 16
@@ -103,11 +102,9 @@ struct ReaderView: View {
             GeometryReader { geometry in
                 ZStack {
                     ReaderWebView(
-                        fileURL: viewModel.getCurrentChapter(),
                         userConfig: userConfig,
                         viewSize: CGSize(width: geometry.size.width, height: geometry.size.height),
-                        clearHighlight: clearHighlight,
-                        currentProgress: viewModel.currentProgress,
+                        bridge: viewModel.bridge,
                         onNextChapter: viewModel.nextChapter,
                         onPreviousChapter: viewModel.previousChapter,
                         onSaveBookmark: viewModel.saveBookmark,
@@ -142,7 +139,7 @@ struct ReaderView: View {
                             viewModel.showPopup &&
                             (abs(value.translation.width) > CGFloat(userConfig.popupSwipeThreshold)) &&
                             (abs(value.translation.height) < 20) {
-                            clearHighlight.toggle()
+                            viewModel.clearWebHighlight()
                             viewModel.closePopup()
                         }
                     }))
@@ -241,10 +238,16 @@ struct ReaderView: View {
                     .preferredColorScheme(userConfig.theme == .custom ? userConfig.uiTheme.colorScheme : (userConfig.theme.colorScheme ?? systemColorScheme))
             case .chapters:
                 ChapterListView(document: viewModel.document, bookInfo: viewModel.bookInfo, currentIndex: viewModel.index, currentCharacter: viewModel.currentCharacter, coverURL: viewModel.coverURL) { spineIndex in
-                    viewModel.setIndex(index: spineIndex, progress: 0)
+                    viewModel.jumpToChapter(index: spineIndex)
                     viewModel.activeSheet = nil
+                    viewModel.clearWebHighlight()
+                    viewModel.closePopup()
+                } onJumpToCharacter: { count in
+                    viewModel.jumpToCharacter(count)
+                    viewModel.activeSheet = nil
+                    viewModel.clearWebHighlight()
+                    viewModel.closePopup()
                 }
-                .presentationDetents([.medium, .large])
             case .statistics:
                 StatisticsView(viewModel: viewModel)
                     .presentationDetents([.medium, .large])
@@ -275,6 +278,7 @@ struct ReaderView: View {
         }
         .navigationBarBackButtonHidden(true)
         .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea(.keyboard)
         .statusBarHidden(focusMode)
     }
 }
